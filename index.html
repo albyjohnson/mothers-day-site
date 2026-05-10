@@ -4,6 +4,11 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Happy Mother's Day 💗</title>
+<meta property="og:title" content="Happy Mother's Day 💗"/>
+<meta property="og:description" content="Open this card I made just for you ❤️"/>
+<meta property="og:image" content="https://mothers-day-site-mu.vercel.app/preview.jpg"/>
+<meta property="og:type" content="website"/>
+<meta name="twitter:card" content="summary_large_image"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Satisfy&family=Nunito:wght@200;300;400;500&display=swap" rel="stylesheet"/>
@@ -632,7 +637,16 @@ document.getElementById('btnDownload').addEventListener('click',function(){
 });
 
 document.getElementById('btnWhatsapp').addEventListener('click',function(){
-  window.open('https://wa.me/?text='+encodeURIComponent('Open this card I made just for you ❤️\n\n'+window.location.href),'_blank','noopener');
+  // Build a shareable URL with the card data encoded as query params
+  var base=window.location.origin+window.location.pathname;
+  var params=new URLSearchParams();
+  params.set('m',currentData.mom||'');
+  params.set('w',currentData.wish||'');
+  if(currentData.from)params.set('f',currentData.from);
+  params.set('fl',currentData.flower||'🌸');
+  var cardUrl=base+'?'+params.toString();
+  var msg='Open this card I made just for you 🌸\n\n'+cardUrl;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank','noopener');
 });
 
 document.getElementById('btnCopy').addEventListener('click',function(){
@@ -683,6 +697,95 @@ function openGarden(){
   document.body.style.overflow='hidden';
 }
 document.getElementById('gardenBack').addEventListener('click',function(){document.getElementById('gardenView').classList.remove('show');document.body.style.overflow='';});
+</script>
+
+<script>
+// AUTO-OPEN CARD FROM URL PARAMS (when mom clicks WhatsApp link)
+(function(){
+  try{
+    var params=new URLSearchParams(window.location.search);
+    var mom=params.get('m');
+    var wish=params.get('w');
+    var from=params.get('f');
+    var flower=params.get('fl');
+    var photo=params.get('p'); // will be null — photos can't go in URL
+
+    if(!mom||!wish)return; // no card data, show normal form
+
+    // Decode
+    mom=decodeURIComponent(mom);
+    wish=decodeURIComponent(wish);
+    from=from?decodeURIComponent(from):'';
+    flower=flower?decodeURIComponent(flower):'🌸';
+
+    // Build card
+    document.getElementById('kMom').textContent=mom;
+    document.getElementById('kWish').textContent='"'+wish+'"';
+    document.getElementById('kFrom').textContent=from?'— from '+from:'';
+    document.getElementById('kFlowerTag').textContent=flower;
+
+    var photoSrc=DEFAULT_PHOTO;
+    var pw=document.getElementById('kPhotoWrap');
+    pw.innerHTML='<div class="k-photo-bg" id="kPhotoBg"></div><div class="k-flower-tag">'+flower+'</div>';
+    document.getElementById('kPhotoBg').style.backgroundImage='url('+JSON.stringify(photoSrc)+')';
+
+    // Show a special "card received" view instead of the form
+    document.querySelector('.main').style.display='none';
+    document.querySelector('.ticker').style.display='none';
+
+    // Show card directly in a full-screen friendly view
+    var cardView=document.createElement('div');
+    cardView.id='sharedCardView';
+    cardView.style.cssText='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2rem 1rem 4rem;background:#fef6f9;';
+
+    var heading=document.createElement('div');
+    heading.style.cssText='text-align:center;margin-bottom:1.5rem;';
+    heading.innerHTML='<p style="font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:#c47898;font-weight:300;margin-bottom:.6rem">A special message for you</p><h1 style="font-family:Satisfy,cursive;font-size:clamp(2rem,7vw,3.2rem);color:#7a2048;line-height:1.1;">Happy Mother's Day</h1>';
+    cardView.appendChild(heading);
+
+    // Move the keepsake card into this view
+    var keepsake=document.getElementById('keepsakeCard');
+    var wrapper=document.createElement('div');
+    wrapper.style.cssText='width:100%;max-width:440px;margin:0 auto 2rem;';
+    keepsake.style.maxWidth='440px';
+    keepsake.style.width='100%';
+    wrapper.appendChild(keepsake);
+    cardView.appendChild(wrapper);
+
+    // "Make your own" CTA
+    var cta=document.createElement('div');
+    cta.style.cssText='text-align:center;margin-top:1rem;';
+    cta.innerHTML='<p style="font-size:.78rem;color:#c478a0;font-weight:300;margin-bottom:.8rem;letter-spacing:.04em;">Want to make a card for your mom?</p><a href="'+window.location.pathname+'" style="display:inline-block;background:#d4607c;color:#fff;font-family:Satisfy,cursive;font-size:1.1rem;padding:.7rem 2rem;border-radius:30px;text-decoration:none;letter-spacing:.04em;">Create your card ♡</a>';
+    cardView.appendChild(cta);
+
+    // Insert before footer
+    var footer=document.querySelector('footer');
+    document.body.insertBefore(cardView,footer);
+
+    // Trigger confetti briefly for mom
+    var cel=document.getElementById('celScreen');
+    cel.classList.add('show');
+    (function spawnForMom(){
+      var confCanvas=document.getElementById('confettiCanvas');
+      var confCtx=confCanvas.getContext('2d');
+      confCanvas.width=confCanvas.offsetWidth;
+      confCanvas.height=confCanvas.offsetHeight;
+      var COLORS=['#d4af70','#c8a050','#e8c88a','#f0d8a0','#b8860b','#daa520','#c0607c','#d4607c','#e07090','#f4b0c0','#c89060','#e8b870'];
+      var pieces=[];
+      var n=80;
+      for(var i=0;i<n;i++){pieces.push({x:Math.random()*confCanvas.width,y:-20-Math.random()*80,w:6+Math.random()*10,h:4+Math.random()*6,rot:Math.random()*Math.PI*2,vx:(Math.random()-0.5)*6,vy:2+Math.random()*4,vr:(Math.random()-0.5)*0.2,col:COLORS[Math.floor(Math.random()*COLORS.length)],shape:Math.random()<0.35?'circle':'rect'});}
+      function draw(){
+        confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
+        var alive=false;
+        pieces.forEach(function(p){p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;p.vy+=0.08;if(p.y<confCanvas.height+20)alive=true;confCtx.save();confCtx.translate(p.x,p.y);confCtx.rotate(p.rot);confCtx.fillStyle=p.col;if(p.shape==='circle'){confCtx.beginPath();confCtx.arc(0,0,p.w/2,0,Math.PI*2);confCtx.fill();}else confCtx.fillRect(-p.w/2,-p.h/2,p.w,p.h);confCtx.restore();});
+        if(alive)requestAnimationFrame(draw);else{confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);cel.classList.remove('show');}
+      }
+      requestAnimationFrame(draw);
+    })();
+    setTimeout(function(){cel.classList.remove('show');},2200);
+
+  }catch(e){console.error('Card URL parse error',e);}
+})();
 </script>
 </body>
 </html>
