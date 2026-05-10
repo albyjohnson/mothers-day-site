@@ -156,7 +156,7 @@ body{font-family:'Nunito',sans-serif;background:#fef6f9;color:#5a2040;-webkit-fo
 .keepsake::after{content:'';position:absolute;bottom:-25px;left:-25px;width:75px;height:75px;border-radius:50%;background:rgba(255,255,255,.35)}
 .k-head{font-family:'Satisfy',cursive;font-size:18px;color:#c06080;margin-bottom:12px;position:relative}
 .k-photo-wrap{position:relative;width:240px;height:240px;margin:8px auto 16px;border-radius:14px;overflow:hidden;border:4px solid #fff;box-shadow:0 4px 18px rgba(212,112,144,.25);background:#fce8f4}
-.k-photo-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+.k-photo-wrap img{width:100%;height:100%;object-fit:cover;display:block}.k-photo-bg{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat}
 .k-flower-tag{position:absolute;top:10px;right:10px;background:#fff;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.12);z-index:2;line-height:1}
 .k-mom{font-family:'Satisfy',cursive;font-size:30px;color:#7a2048;margin:8px 0 10px;position:relative;word-break:break-word;line-height:1.15;padding:0 8px}
 .k-wish{font-size:15px;color:#7a4060;line-height:1.55;font-weight:300;margin-bottom:14px;position:relative;font-style:italic;word-break:break-word;white-space:pre-wrap;padding:0 8px}
@@ -214,7 +214,7 @@ footer p{font-size:clamp(.7rem,2.5vw,.78rem);color:#d4a8c0;font-weight:300;lette
 footer strong{font-family:'Satisfy',cursive;font-size:clamp(1rem,3.5vw,1.2rem);color:#c06080;font-weight:400;display:block}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .shake{animation:shake .3s ease}
-.render-stage{position:fixed;left:-9999px;top:0;width:480px;padding:30px 25px;background:#fff}
+.render-stage{position:fixed;left:-9999px;top:0;width:440px;padding:24px;background:#fff}
 </style>
 </head>
 <body>
@@ -495,7 +495,12 @@ document.getElementById('addBtn').addEventListener('click',function(){
   document.getElementById('kFrom').textContent=from?'— from '+from:'';
   document.getElementById('kFlowerTag').textContent=selFlower;
   var photoSrc=uploadedPhoto||DEFAULT_PHOTO;
-  document.getElementById('kPhotoWrap').innerHTML='<img src="'+photoSrc+'" alt="photo"/><div class="k-flower-tag">'+selFlower+'</div>';
+  (function(){
+    var pw=document.getElementById('kPhotoWrap');
+    // Use background-image div so html2canvas renders cover correctly
+    pw.innerHTML='<div class="k-photo-bg" id="kPhotoBg"></div><div class="k-flower-tag">'+selFlower+'</div>';
+    document.getElementById('kPhotoBg').style.backgroundImage='url('+JSON.stringify(photoSrc)+')';
+  })();
 
   // STEP 1: Show celebration screen (full screen, on top)
   celScreen.classList.add('show');
@@ -524,14 +529,94 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(modal.cl
 // RENDER CARD FOR DOWNLOAD
 function renderCard(cb){
   var stage=document.createElement('div');stage.className='render-stage';
-  var clone=document.getElementById('keepsakeCard').cloneNode(true);
-  clone.style.maxWidth='420px';clone.style.width='420px';
+  // Deep clone keepsake card
+  var src=document.getElementById('keepsakeCard');
+  var clone=src.cloneNode(true);
+  clone.style.maxWidth='400px';clone.style.width='400px';
+
+  // html2canvas doesn't support object-fit or CSS background-size:cover on <img>.
+  // We already use a background-image div. Make sure the clone's photo div
+  // has the background-image inline style copied over (cloneNode copies inline styles).
+  // Additionally, convert any <img> inside k-photo-wrap to a background-image div.
+  var cloneWrap=clone.querySelector('.k-photo-wrap');
+  if(cloneWrap){
+    var origBg=document.getElementById('kPhotoBg');
+    var cloneBg=cloneWrap.querySelector('.k-photo-bg');
+    if(origBg&&cloneBg){
+      // Ensure inline style is set
+      cloneBg.style.backgroundImage=origBg.style.backgroundImage;
+      cloneBg.style.backgroundSize='cover';
+      cloneBg.style.backgroundPosition='center';
+      cloneBg.style.position='absolute';
+      cloneBg.style.inset='0';
+      cloneBg.style.top='0';cloneBg.style.left='0';cloneBg.style.right='0';cloneBg.style.bottom='0';
+      cloneBg.style.width='100%';cloneBg.style.height='100%';
+    }
+    // Also remove any stray <img> tags that may have been cloned from old state
+    var imgs=cloneWrap.querySelectorAll('img');
+    imgs.forEach(function(img){img.parentNode.removeChild(img);});
+  }
+
   stage.appendChild(clone);document.body.appendChild(stage);
-  setTimeout(function(){
-    html2canvas(clone,{backgroundColor:null,scale:2,useCORS:true,allowTaint:true,logging:false})
-      .then(function(canvas){document.body.removeChild(stage);canvas.toBlob(function(blob){cb(blob);},'image/png',1);})
-      .catch(function(err){document.body.removeChild(stage);console.error(err);cb(null);});
-  },60);
+
+  // Pre-load the background image as a canvas so html2canvas can use it
+  var bgDiv=clone.querySelector('.k-photo-bg');
+  var bgUrl=bgDiv?bgDiv.style.backgroundImage.replace(/^url\(["']?/,'').replace(/["']?\)$/,''):'';
+
+  function doRender(){
+    html2canvas(clone,{
+      backgroundColor:'#fce8f4',
+      scale:2,
+      useCORS:true,
+      allowTaint:true,
+      logging:false,
+      onclone:function(doc){
+        // In the cloned doc, draw photo onto a canvas and replace bg div
+        var bd=doc.querySelector('.k-photo-bg');
+        var wrap=doc.querySelector('.k-photo-wrap');
+        if(bd&&bgUrl&&wrap){
+          var cv=doc.createElement('canvas');
+          var ww=wrap.offsetWidth||240;
+          var wh=wrap.offsetHeight||240;
+          cv.width=ww*2;cv.height=wh*2;
+          cv.style.position='absolute';cv.style.top='0';cv.style.left='0';
+          cv.style.width='100%';cv.style.height='100%';
+          var cx=cv.getContext('2d');
+          var img=new doc.defaultView.Image();
+          img.crossOrigin='anonymous';
+          img.src=bgUrl;
+          // draw synchronously if cached, else just leave bg-image
+          if(img.complete&&img.naturalWidth){
+            // cover math
+            var iw=img.naturalWidth,ih=img.naturalHeight;
+            var tw=cv.width,th=cv.height;
+            var scale=Math.max(tw/iw,th/ih);
+            var dw=iw*scale,dh=ih*scale;
+            var dx=(tw-dw)/2,dy=(th-dh)/2;
+            cx.drawImage(img,dx,dy,dw,dh);
+            bd.parentNode.insertBefore(cv,bd);
+            bd.style.display='none';
+          }
+        }
+      }
+    })
+    .then(function(canvas){
+      document.body.removeChild(stage);
+      canvas.toBlob(function(blob){cb(blob);},'image/png',1);
+    })
+    .catch(function(err){document.body.removeChild(stage);console.error(err);cb(null);});
+  }
+
+  // Pre-load image before rendering so it's in cache
+  if(bgUrl){
+    var preload=new Image();
+    preload.crossOrigin='anonymous';
+    preload.onload=function(){setTimeout(doRender,80);};
+    preload.onerror=function(){setTimeout(doRender,80);};
+    preload.src=bgUrl;
+  }else{
+    setTimeout(doRender,60);
+  }
 }
 
 document.getElementById('btnDownload').addEventListener('click',function(){
